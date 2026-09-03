@@ -865,7 +865,16 @@ class LibraryManager(EngineScoped):
                 # StartWorkerRequest only SCHEDULES the spawn and always reports success, so a
                 # spawn that dies records its own reason from the task's exception handler
                 # (WorkerManager._log_spawn_error) rather than being inferred from here.
-                library_info.execution_unavailable_reason = None
+                #
+                # A declared resource this machine does not have is the exception: spawning a
+                # worker does not give the machine a GPU, so clearing that reason would send the
+                # node to a worker that cannot load the library, replacing a local refusal an
+                # artist can act on with a failure reported from another process.
+                unmet_requirements = any(
+                    isinstance(problem, IncompatibleRequirementsProblem) for problem in library_info.problems
+                )
+                if not unmet_requirements:
+                    library_info.execution_unavailable_reason = None
                 await self.engine.ahandle_request(StartWorkerRequest(library_name=library_info.library_name))
 
     def on_worker_evicted(self, worker_engine_id: str, library_name: str | None) -> None:

@@ -9,6 +9,10 @@ import pytest
 
 from griptape_nodes.node_library.library_registry import Dependencies, LibraryMetadata
 from griptape_nodes.retained_mode.events.app_events import LibraryLoadedNotification
+from griptape_nodes.retained_mode.managers.fitness_problems.libraries import (
+    DependencyInstallationFailedProblem,
+    IncompatibleRequirementsProblem,
+)
 from griptape_nodes.retained_mode.managers.library_manager import LibraryManager
 
 
@@ -307,3 +311,49 @@ class TestOnWorkerEvicted:
         manager = _make_library_manager()
         manager.on_worker_evicted("worker-1", "Never Registered")
         manager.on_worker_evicted("worker-1", None)
+
+
+class TestResourceGateSurvivesWorkerSpawn:
+    """A capability refusal must outlive the worker spawn that follows it.
+
+    The spawn path clears `execution_unavailable_reason`, which is right for a reason the spawn
+    itself produced ("the worker stopped responding") and wrong for a machine capability: starting
+    a worker does not give the machine a GPU. Cleared, a cuda-only library on a CPU box stopped
+    refusing locally and instead dispatched to a worker that could not load it, so the artist got
+    a failure reported from another process rather than the local one naming the missing hardware.
+    """
+
+    def _info(self, *, problems: list[Any]) -> Any:
+        info = LibraryManager.LibraryInfo(
+            lifecycle_state=LibraryManager.LibraryLifecycleState.LOADED,
+            fitness=LibraryManager.LibraryFitness.FLAWED,
+            library_path="/some/path.json",
+            is_sandbox=False,
+            library_name="Lib",
+            executes_in_worker=True,
+        )
+        info.problems = problems
+        info.execution_unavailable_reason = "it needs compute cuda, and this machine has cpu."
+        return info
+
+    def test_an_unmet_requirement_keeps_its_reason(self) -> None:
+        info = self._info(
+            problems=[
+                IncompatibleRequirementsProblem(
+                    requirements={"compute": (["cuda"], "has_any")},
+                    system_capabilities={"compute": ["cpu"]},
+                )
+            ]
+        )
+
+        unmet = any(isinstance(problem, IncompatibleRequirementsProblem) for problem in info.problems)
+
+        assert unmet, "an unmet-requirement problem must be recognisable so its reason is preserved"
+
+    def test_any_other_problem_does_not_preserve_the_reason(self) -> None:
+        """Only a capability problem is permanent; a spawn-derived reason must still be cleared."""
+        info = self._info(problems=[DependencyInstallationFailedProblem(error_details="pip said no")])
+
+        unmet = any(isinstance(problem, IncompatibleRequirementsProblem) for problem in info.problems)
+
+        assert not unmet
