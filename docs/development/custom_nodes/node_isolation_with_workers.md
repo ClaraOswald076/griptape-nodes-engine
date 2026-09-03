@@ -417,7 +417,7 @@ from, prefixed with `Worker-<engine-id>` so you can tell it apart
 from orchestrator output. Look for both **WARNING** and **ERROR**
 entries.
 
-The six rules and their actual severities:
+The five rules and their actual severities:
 
 | Rule                                                      | Orchestrator | Worker  | Notes                                                                                                                                                                                                         |
 | --------------------------------------------------------- | ------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
