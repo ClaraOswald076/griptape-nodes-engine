@@ -184,7 +184,10 @@ def sanctioned_parameter_mutation() -> Iterator[None]:
 
 
 @contextmanager
-def aprocess_scope(precomputed_variables: dict[str, str | int] | None = None) -> Iterator[None]:
+def aprocess_scope(
+    precomputed_variables: dict[str, str | int] | None = None,
+    workflow_dir: str | None = None,
+) -> Iterator[None]:
     """Mark the enclosed block as the actual aprocess() execution.
 
     The framework wraps ``await node.aprocess()`` with this so the
@@ -198,8 +201,13 @@ def aprocess_scope(precomputed_variables: dict[str, str | int] | None = None) ->
             {VAR} tokens without a NodeManager lookup. This is required for
             worker-executed nodes (which have no registry access) and is a
             performance shortcut for in-process nodes.
+        workflow_dir: Optional orchestrator-resolved workflow folder. Same rationale as
+            precomputed_variables: a worker has no workflow context, so without this the
+            `workflow_dir` builtin raises and the optional `{workflow_dir?:/}` in the default
+            `{outputs}` template silently degrades to a workspace-relative path.
     """
     token = _in_aprocess.set(True)
+    workflow_dir_token = VariableResolver.seed_workflow_dir(workflow_dir)
     # Pre-seed with orchestrator-resolved variables when provided; otherwise
     # VariableResolver.get_variables_if_enabled() will populate lazily on first call.
     cache_token = VariableResolver.seed_cache(precomputed_variables)
@@ -208,6 +216,7 @@ def aprocess_scope(precomputed_variables: dict[str, str | int] | None = None) ->
     finally:
         _in_aprocess.reset(token)
         VariableResolver.reset_cache(cache_token)
+        VariableResolver.reset_workflow_dir(workflow_dir_token)
 
 
 class ImportDependency(NamedTuple):

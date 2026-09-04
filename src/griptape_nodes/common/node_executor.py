@@ -277,6 +277,7 @@ class NodeExecutor(EngineScoped):
                     parameter_values=dict(node.parameter_values),
                     node_metadata=cast("NodeMetadata", dict(node.metadata)),
                     variables=self._resolve_variables_for_node(node.name),
+                    workflow_dir=self._resolve_workflow_dir_for_worker(),
                 )
             )
             if not isinstance(result, ExecuteNodeResultSuccess):
@@ -297,6 +298,22 @@ class NodeExecutor(EngineScoped):
                 node.parameter_output_values[name] = value
         finally:
             current_executing_node_name.reset(token)
+
+    def _resolve_workflow_dir_for_worker(self) -> str | None:
+        """The current workflow's folder, for a worker that has no workflow context.
+
+        Resolved here because only this process has a workflow. A worker asked to resolve
+        `workflow_dir` itself raises, and the default `{outputs}` template marks the reference
+        optional (`{workflow_dir?:/}outputs`), so the raise is swallowed and the path silently
+        degrades to workspace-relative -- the worker writes one place, this process reads another.
+
+        None when this process has no current workflow either: that is the one case where both
+        sides agree, and the degraded path is then correct rather than divergent.
+        """
+        try:
+            return self.engine.project_manager.resolve_workflow_dir_for_dispatch()
+        except RuntimeError:
+            return None
 
     def _resolve_variables_for_node(self, node_name: str) -> dict[str, str | int]:
         """Resolve the variable dict for a node's flow on the orchestrator.

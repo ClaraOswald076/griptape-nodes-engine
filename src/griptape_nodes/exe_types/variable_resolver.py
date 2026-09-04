@@ -24,6 +24,12 @@ _aprocess_variable_cache: ContextVar[dict | object | None] = ContextVar(
     "_variable_resolver_aprocess_cache", default=None
 )
 
+# The workflow folder the ORCHESTRATOR resolved, for the duration of one aprocess() call. Only a
+# worker ever sees a value here: it has no workflow context of its own, so `workflow_dir` would
+# raise, and that raise degrades silently because the default `{outputs}` template marks the
+# reference optional. Seeded by aprocess_scope() from ExecuteNodeRequest.
+_aprocess_workflow_dir: ContextVar[str | None] = ContextVar("_variable_resolver_workflow_dir", default=None)
+
 
 class VariableResolver:
     """Resolves inline {VAR} macro references in node parameter values during aprocess().
@@ -113,6 +119,26 @@ class VariableResolver:
         if isinstance(value, list):
             return [VariableResolver.resolve_value(item, variables, node_name) for item in value]
         return value
+
+    @staticmethod
+    def seed_workflow_dir(workflow_dir: str | None) -> object:
+        """Pre-seed the workflow folder the ORCHESTRATOR resolved, for one node execution.
+
+        Lives beside the variable cache because it is the same kind of value for the same reason:
+        state a worker cannot compute, resolved by the process that can and carried on the
+        execution request. ProjectManager reads it when resolving the `workflow_dir` builtin.
+        """
+        return _aprocess_workflow_dir.set(workflow_dir)
+
+    @staticmethod
+    def reset_workflow_dir(token: object) -> None:
+        """Reset the seeded workflow folder to its state before seed_workflow_dir."""
+        _aprocess_workflow_dir.reset(token)  # type: ignore[arg-type]
+
+    @staticmethod
+    def seeded_workflow_dir() -> str | None:
+        """The orchestrator-resolved workflow folder for the running node execution, if any."""
+        return _aprocess_workflow_dir.get()
 
     @staticmethod
     def seed_cache(variables: dict[str, str | int] | None) -> object:

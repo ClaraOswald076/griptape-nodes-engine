@@ -45,6 +45,7 @@ from griptape_nodes.common.project_templates import (
     schema_major_or_none,
     select_project_path,
 )
+from griptape_nodes.exe_types.variable_resolver import VariableResolver
 from griptape_nodes.files.derivation import DERIVATION_RULES, apply_derivation_rules
 from griptape_nodes.files.file import File, FileWriteError
 from griptape_nodes.files.path_utils import (
@@ -4783,6 +4784,14 @@ class ProjectManager(EngineScoped):
         msg = f"Unknown builtin variable: {var_name}"
         raise ValueError(msg)
 
+    def resolve_workflow_dir_for_dispatch(self) -> str:
+        """The current workflow's folder, for handing to a worker on an execution request.
+
+        Raises RuntimeError when this process has no current workflow, matching the builtin
+        resolver it delegates to; the dispatch path treats that as "nothing to hand over".
+        """
+        return self._resolve_workflow_dir()
+
     def _resolve_workflow_dir(self) -> str:
         """Resolve the `workflow_dir` builtin: the folder the current workflow belongs to.
 
@@ -4804,6 +4813,14 @@ class ProjectManager(EngineScoped):
             RuntimeError: If no workflow is in context, or the workflow has neither a file nor
                 a folder to answer with.
         """
+        # Highest authority: a folder the ORCHESTRATOR resolved and sent with the execution
+        # request. Only a worker sees this, and only while running a node. It outranks the local
+        # context because the point is to answer exactly as the process that owns the workflow
+        # would -- a worker that answered from its own (empty) context would resolve a different
+        # folder and write where nothing looks.
+        if (seeded := VariableResolver.seeded_workflow_dir()) is not None:
+            return seeded
+
         context_manager = self.engine.context_manager
         if not context_manager.has_current_workflow():
             msg = "No current workflow"

@@ -507,6 +507,13 @@ class ExecuteNodeRequest(RequestPayload):
             Workers carry this field because they have no access to VariablesManager
             or the workflow context; in-process nodes use it to skip the NodeManager
             lookup that would otherwise resolve the flow.
+        workflow_dir: The folder the orchestrator's current workflow belongs to, resolved by the
+            orchestrator because it is the only process that has one. Carried for the same reason
+            as `variables`: a worker has no workflow context, so the `workflow_dir` builtin would
+            raise there. It is marked optional in the default `{outputs}` template
+            (`{workflow_dir?:/}outputs`), so the raise degrades SILENTLY to a workspace-relative
+            path -- the worker writes one place and the orchestrator reads another. None when the
+            orchestrator has no current workflow either, which is the one case both agree on.
 
     Results: ExecuteNodeResultSuccess | ExecuteNodeResultFailure
     """
@@ -515,6 +522,7 @@ class ExecuteNodeRequest(RequestPayload):
     parameter_values: dict[str, Any] = field(default_factory=dict)
     node_metadata: NodeMetadata | None = None
     variables: dict[str, str | int] = field(default_factory=dict)
+    workflow_dir: str | None = None
 
 
 @dataclass
