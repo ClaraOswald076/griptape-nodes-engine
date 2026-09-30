@@ -37,6 +37,8 @@ the engine's request API from working without edits. Migration steps live in
   (env `GTN_CONFIG_WORKER__LIBRARY_LOAD_TIMEOUT_S`). With its heartbeat role removed, what it bounds
   is how long a worker may take to load its library, which the new name states. A config file still
   setting the old name silently falls back to the 600 second default.
+- Workflows run in a subprocess now verify TLS certificates against the operating system's trust
+  store, matching the app.
 
 ### Fixed
 
